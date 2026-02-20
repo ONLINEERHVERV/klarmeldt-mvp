@@ -8,7 +8,12 @@
       "Bash(git branch:*)",
       "Bash(git push:*)",
       "Bash(git remote set-url:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(git -C /Users/biz/Downloads/klarmeldt-app status)",
+      "Bash(git -C /Users/biz/Downloads/klarmeldt-app log --oneline -3)",
+      "Bash(git -C /Users/biz/Downloads/klarmeldt-app add supabase/ CLAUDE.md .claude/settings.local.json)",
+      "Bash(git -C:*)",
+      "Bash(git -C /Users/biz/Downloads/klarmeldt-app push)"
     ]
   }
 }

@@ -18,7 +18,7 @@ SaaS-platform til danske ejendomsadministratorer der digitaliserer istandsættel
 - **Styling:** Inline styles (ingen CSS-framework, kun minimal global CSS)
 - **Font:** DM Sans (Google Fonts)
 - **PWA:** Service worker + manifest.json for installérbar webapp
-- **Backend:** Ingen (planlagt: Supabase med PostgreSQL, Auth, Storage)
+- **Backend:** Supabase (PostgreSQL, planlagt: Auth, Storage)
 - **State:** React `useState` – al data lever i hukommelsen
 
 ## Filstruktur
@@ -36,10 +36,16 @@ klarmeldt-app/
 │   ├── sw.js                 # Service worker (cache-first, offline fallback)
 │   ├── icon-192.png          # App-ikon 192x192
 │   └── icon-512.png          # App-ikon 512x512
-├── package.json              # Dependencies: next, react, react-dom
-├── next.config.js            # reactStrictMode: true
+├── lib/
+│   └── supabase.js            # Supabase client (browser)
+├── supabase/
+│   ├── migrations/            # 13 SQL-migrationsfiler (se Database-sektion)
+│   └── seed.sql               # Demo-data matchende mock i Klarmeldt.jsx
+├── package.json               # Dependencies: next, react, react-dom, @supabase/supabase-js
+├── next.config.js             # reactStrictMode: true
+├── .env.local                 # Supabase URL + anon key (gitignored)
 ├── .gitignore
-└── README.md                 # Hosting-guide og projektbeskrivelse
+└── README.md                  # Hosting-guide og projektbeskrivelse
 ```
 
 ## Arkitektur i Klarmeldt.jsx
@@ -107,11 +113,50 @@ Skift med "Skift til Håndværker/Administrator"-knappen i sidebar.
 - **5 håndværkerfirmaer:** Maler Gruppen, Electi Gulvservice, Tømrer Pedersen, El-Eksperten, ProClean
 - **Dato-kontekst:** Applikationen bruger en hardcoded "nu"-dato: 1. november 2025
 
+## Database (Supabase PostgreSQL)
+
+**Projekt:** `fpapsexgsaagqqyfgbqb.supabase.co`
+
+### Tabeller (10 stk)
+
+| Tabel | Formål | PK |
+|-------|--------|----|
+| `trades` | Faggrupper (maler, tømrer, etc.) med farver/emoji | text key |
+| `profiles` | Auth-brugere med rolle (admin/haandvaerker) | uuid → auth.users |
+| `contractors` | Håndværkerfirmaer med kontakt, pris, rating | uuid |
+| `projects` | Istandsættelsesprojekter med adresse, datoer | uuid |
+| `tasks` | Opgaver tilknyttet projekt, fag og håndværker | uuid |
+| `messages` | Projektbeskeder (immutable chat log) | uuid |
+| `liability_items` | Lejer/udlejer hæftelsesposter | uuid |
+| `inspection_data` | Gennemgangsresultat pr. projekt (1:1) | uuid |
+| `inspection_rooms` | Rum-for-rum inspektionsvurdering | uuid |
+| `time_logs` | Tidsregistreringer + `task_time_summary` view | uuid |
+
+### Enums
+- `project_status`: kommende, igangvaerende, afsluttet
+- `task_status`: afventer, igang, faerdig, godkendt, rettelse
+- `user_role`: admin, haandvaerker
+- `liability_party`: lejer, udlejer
+- `lang_code`: da, en
+- `inspection_room_status`: godkendt, rettelse
+
+### RLS-strategi
+- 3 helper-funktioner: `is_admin()`, `my_contractor_id()`, `contractor_has_project_access()`
+- **Admins:** Fuld læse/skrive adgang
+- **Håndværkere:** Kun projekter de har opgaver på, kun egne opgaver/tidslogs
+- **Beskeder og time_logs:** Append-only for ikke-admins
+
+### Migrations
+13 filer i `supabase/migrations/` (kør i Supabase SQL Editor i rækkefølge):
+1. `_create_enums` → 2. `_create_trades` → 3. `_create_profiles` → 4. `_create_contractors` → 5. `_create_projects` → 6. `_create_tasks` → 7. `_create_messages` → 8. `_create_liability_items` → 9. `_create_inspection_data` → 10. `_create_inspection_rooms` → 11. `_create_time_logs` → 12. `_create_indexes` → 13. `_create_rls_policies`
+
+Seed-data i `supabase/seed.sql` (kræver at auth users oprettes først).
+
 ## Planlagt videreudvikling
 
-- Supabase backend (PostgreSQL) til persistering
-- Authentication med roller (NextAuth eller Supabase Auth)
-- Filupload til flytterapporter og billeder
+- Authentication med roller (Supabase Auth)
+- Koble frontend til Supabase (erstat mock-data med live queries)
+- Filupload til flytterapporter og billeder (Supabase Storage)
 - Push-notifikationer til håndværkere
 - AI-parsing af flytterapporter
 
@@ -129,4 +174,4 @@ npm run start   # Start produktionsserver
 - Dansk sprog i hele UI'et
 - Kompakt kode-stil med korte variabelnavne (CONS, SCOL, TL, fmt, pct)
 - Alle komponenter i én fil (Klarmeldt.jsx)
-- Ingen externe dependencies udover React og Next.js
+- Ingen externe dependencies udover React, Next.js og @supabase/supabase-js
