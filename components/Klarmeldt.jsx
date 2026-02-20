@@ -196,7 +196,7 @@ const Tab = ({ tabs, active, onChange }) => (
 // ============================================================
 // ADMIN: SIDEBAR
 // ============================================================
-const AdminSidebar = ({ page, go, role, setRole, open, onClose }) => {
+const AdminSidebar = ({ page, go, profile, onLogout, open, onClose }) => {
   const nav = [
     { id: "dash", l: "Dashboard", icon: I.Home },
     { id: "proj", l: "Projekter", icon: I.Folder },
@@ -208,7 +208,7 @@ const AdminSidebar = ({ page, go, role, setRole, open, onClose }) => {
   ];
 
   const handleNav = (id) => { go(id); if (onClose) onClose(); };
-  const handleSwap = () => { setRole(role === "admin" ? "craft" : "admin"); if (onClose) onClose(); };
+  const initials = profile.full_name.split(" ").map(n => n[0]).join("").toUpperCase();
 
   return (
     <>
@@ -249,21 +249,18 @@ const AdminSidebar = ({ page, go, role, setRole, open, onClose }) => {
             </button>
           ))}
         </nav>
-        <div style={{ padding: "10px 12px", borderTop: "1px solid #1E293B" }}>
-          <button onClick={handleSwap} style={{
-            display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "9px 12px",
-            background: "linear-gradient(135deg, #1E293B, #334155)", border: "1px solid #475569",
-            borderRadius: 8, color: "#E2E8F0", cursor: "pointer", fontSize: 12, fontWeight: 600,
-          }}>
-            <I.Swap style={{ width: 15, height: 15 }} />
-            Skift til {role === "admin" ? "Håndværker" : "Administrator"}
-          </button>
-        </div>
         <div style={{ padding: "12px 14px", borderTop: "1px solid #1E293B" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg, #3B82F6, #8B5CF6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 }}>PS</div>
-            <div><div style={{ fontSize: 12, fontWeight: 600 }}>Pieter Secuur</div><div style={{ fontSize: 10, color: "#64748B" }}>Driftsleder</div></div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg, #3B82F6, #8B5CF6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 }}>{initials}</div>
+            <div style={{ flex: 1 }}><div style={{ fontSize: 12, fontWeight: 600 }}>{profile.full_name}</div><div style={{ fontSize: 10, color: "#64748B" }}>Administrator</div></div>
           </div>
+          <button onClick={onLogout} style={{
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", padding: "8px 12px",
+            background: "#1E293B", border: "1px solid #334155",
+            borderRadius: 8, color: "#94A3B8", cursor: "pointer", fontSize: 12, fontWeight: 500,
+          }}>
+            Log ud
+          </button>
         </div>
       </div>
     </>
@@ -378,7 +375,7 @@ const ProjCard = ({ p, onClick }) => {
 // ============================================================
 // ADMIN: PROJECT DETAIL
 // ============================================================
-const AdminDetail = ({ project: p, update, go }) => {
+const AdminDetail = ({ project: p, update, go, profile }) => {
   const [tab, setTab] = useState("tasks");
   const [showAdd, setShowAdd] = useState(false);
   const [newT, setNewT] = useState({ trade: "maler", desc: "", assigned: "", estH: "", room: "", liability: "udlejer" });
@@ -400,7 +397,7 @@ const AdminDetail = ({ project: p, update, go }) => {
 
   const sendMsg = () => {
     if (!msgTxt.trim()) return;
-    update({ ...p, msgs: [...p.msgs, { id: Date.now(), from: "Pieter Secuur", role: "admin", text: msgTxt, time: new Date().toISOString() }] });
+    update({ ...p, msgs: [...p.msgs, { id: Date.now(), from: profile.full_name, role: "admin", text: msgTxt, time: new Date().toISOString() }] });
     setMsgTxt("");
   };
 
@@ -935,14 +932,16 @@ const Contractors = () => (
 // ============================================================
 // HÅNDVÆRKER: MOBILE APP VIEW
 // ============================================================
-const CraftApp = ({ projects, update, setRole }) => {
+const CraftApp = ({ projects, update, profile, contractor, onLogout }) => {
   const [page, setPage] = useState("today");
   const [selTask, setSelTask] = useState(null);
   const [timer, setTimer] = useState(null);
   const [elapsed, setElapsed] = useState(0);
 
-  // Tasks assigned to "Maler Gruppen" (id: 1)
-  const myTasks = projects.flatMap(p => p.tasks.filter(t => t.assigned === 1).map(t => ({ ...t, project: p })));
+  // Find matching mock contractor by name or email
+  const myCon = contractor ? CONS.find(c => c.name === contractor.name || c.email === contractor.email) : CONS[0];
+  const myConId = myCon ? myCon.id : 1;
+  const myTasks = projects.flatMap(p => p.tasks.filter(t => t.assigned === myConId).map(t => ({ ...t, project: p })));
   const todayTasks = myTasks.filter(t => t.status === "igang" || t.status === "afventer");
   const upcomingTasks = myTasks.filter(t => t.project.status === "k");
 
@@ -978,11 +977,11 @@ const CraftApp = ({ projects, update, setRole }) => {
           <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg, #22D3EE, #3B82F6)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14, color: "#fff" }}>K</div>
           <div>
             <div style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>Klarmeldt</div>
-            <div style={{ color: "#64748B", fontSize: 10 }}>Maler Gruppen ApS</div>
+            <div style={{ color: "#64748B", fontSize: 10 }}>{contractor?.name || "Håndværker"}</div>
           </div>
         </div>
-        <button onClick={() => setRole("admin")} style={{ background: "#1E293B", border: "none", borderRadius: 8, padding: "6px 12px", color: "#94A3B8", fontSize: 11, cursor: "pointer" }}>
-          <I.Swap style={{ width: 13, height: 13 }} /> Admin
+        <button onClick={onLogout} style={{ background: "#1E293B", border: "none", borderRadius: 8, padding: "6px 12px", color: "#94A3B8", fontSize: 11, cursor: "pointer" }}>
+          Log ud
         </button>
       </div>
 
@@ -1110,8 +1109,8 @@ const CraftApp = ({ projects, update, setRole }) => {
 // ============================================================
 // MAIN APP
 // ============================================================
-export default function Klarmeldt() {
-  const [role, setRole] = useState("admin");
+export default function Klarmeldt({ profile, contractor, onLogout }) {
+  const role = profile.role === "haandvaerker" ? "craft" : "admin";
   const [page, setPage] = useState("dash");
   const [selProj, setSelProj] = useState(null);
   const [projects, setProjects] = useState(initProjects);
@@ -1132,7 +1131,7 @@ export default function Klarmeldt() {
 
   const go = (pg) => { setPage(pg); if (pg !== "detail") setSelProj(null); };
 
-  if (role === "craft") return <CraftApp projects={projects} update={updateProject} setRole={setRole} />;
+  if (role === "craft") return <CraftApp projects={projects} update={updateProject} profile={profile} contractor={contractor} onLogout={onLogout} />;
 
   const renderPage = () => {
     switch (page) {
@@ -1156,7 +1155,7 @@ export default function Klarmeldt() {
           })}
         </div>
       );
-      case "detail": return <AdminDetail project={selProj} update={updateProject} go={go} />;
+      case "detail": return <AdminDetail project={selProj} update={updateProject} go={go} profile={profile} />;
       case "craft": return <Contractors />;
       case "analytics": return <Analytics />;
       case "archive": return (
@@ -1217,9 +1216,9 @@ export default function Klarmeldt() {
   return (
     <div style={{ display: "flex", height: "100vh", fontFamily: "'DM Sans', 'Segoe UI', system-ui, -apple-system, sans-serif", background: "#F8FAFC" }}>
       {isMobile ? (
-        <AdminSidebar page={page} go={go} role={role} setRole={setRole} open={sideOpen} onClose={() => setSideOpen(false)} />
+        <AdminSidebar page={page} go={go} profile={profile} onLogout={onLogout} open={sideOpen} onClose={() => setSideOpen(false)} />
       ) : (
-        <AdminSidebar page={page} go={go} role={role} setRole={setRole} />
+        <AdminSidebar page={page} go={go} profile={profile} onLogout={onLogout} />
       )}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {/* Mobile header */}
@@ -1232,9 +1231,7 @@ export default function Klarmeldt() {
               <div style={{ width: 26, height: 26, borderRadius: 7, background: "linear-gradient(135deg, #22D3EE, #3B82F6)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 12, color: "#fff" }}>K</div>
               <span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>Klarmeldt</span>
             </div>
-            <button onClick={() => setRole("craft")} style={{ background: "#1E293B", border: "none", borderRadius: 6, padding: "5px 10px", color: "#94A3B8", fontSize: 10, cursor: "pointer" }}>
-              <I.Swap style={{ width: 13, height: 13 }} />
-            </button>
+            <div style={{ width: 30 }} />
           </div>
         )}
         <main style={{ flex: 1, overflow: "auto", padding: isMobile ? "16px" : "28px 36px" }}>{renderPage()}</main>
