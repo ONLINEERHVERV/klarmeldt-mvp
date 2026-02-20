@@ -6,7 +6,9 @@ SaaS-platform til danske ejendomsadministratorer der digitaliserer istandsættel
 
 - **Prototype URL:** https://klarmeldt.frederikhoffmeyer.dk
 - **GitHub:** ONLINEERHVERV/klarmeldt-mvp
-- **Hosting:** Vercel (automatisk deploy fra GitHub)
+- **Hosting:** Vercel — auto-deploy fra GitHub ved push til `main`
+- **Domæne:** Custom domain `klarmeldt.frederikhoffmeyer.dk` konfigureret i Vercel, DNS via Simply
+- **Deploy-flow:** Push til `main` → Vercel bygger og deployer automatisk. Ingen Vercel CLI nødvendig.
 
 ## Tech Stack
 
