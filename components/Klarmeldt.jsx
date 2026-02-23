@@ -311,9 +311,9 @@ const AdminSidebar = ({ page, go, profile, onLogout, open, onClose }) => {
           {nav.map(n => (
             <button key={n.id} onClick={() => handleNav(n.id)} style={{
               display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 12px",
-              background: page === n.id ? "#1E293B" : "transparent", border: "none", borderRadius: 8,
-              color: page === n.id ? "#fff" : "#94A3B8", cursor: "pointer", fontSize: 13,
-              fontWeight: page === n.id ? 600 : 400, marginBottom: 1,
+              background: (page === n.id || (n.id === "proj" && page === "detail")) ? "#1E293B" : "transparent", border: "none", borderRadius: 8,
+              color: (page === n.id || (n.id === "proj" && page === "detail")) ? "#fff" : "#94A3B8", cursor: "pointer", fontSize: 13,
+              fontWeight: (page === n.id || (n.id === "proj" && page === "detail")) ? 600 : 400, marginBottom: 1,
             }}>
               <n.icon style={{ width: 17, height: 17 }} />{n.l}
               {n.badge && <span style={{ marginLeft: "auto", background: "#EF4444", color: "#fff", fontSize: 10, fontWeight: 700, borderRadius: 10, padding: "1px 6px" }}>{n.badge}</span>}
