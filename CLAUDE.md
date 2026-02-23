@@ -1,6 +1,6 @@
 # Klarmeldt
 
-SaaS-platform til danske ejendomsadministratorer der digitaliserer istandsættelse af lejemål. Prototypen er en interaktiv demo med al data i browseren (ingen backend endnu).
+SaaS-platform til danske ejendomsadministratorer der digitaliserer istandsættelse af lejemål. Authentication via Supabase Auth, demo-data i Supabase PostgreSQL, frontend stadig med mock-data i browseren.
 
 ## Hosting & Repository
 
@@ -18,8 +18,9 @@ SaaS-platform til danske ejendomsadministratorer der digitaliserer istandsættel
 - **Styling:** Inline styles (ingen CSS-framework, kun minimal global CSS)
 - **Font:** DM Sans (Google Fonts)
 - **PWA:** Service worker + manifest.json for installérbar webapp
-- **Backend:** Supabase (PostgreSQL, planlagt: Auth, Storage)
-- **State:** React `useState` – al data lever i hukommelsen
+- **Backend:** Supabase (PostgreSQL + Auth)
+- **Auth:** Supabase Auth med email/password, rolle fra `profiles`-tabel
+- **State:** React `useState` – UI-data lever i hukommelsen, auth via Supabase
 
 ## Filstruktur
 
@@ -28,19 +29,23 @@ klarmeldt-app/
 ├── app/
 │   ├── globals.css          # Global reset, scrollbar, font, focus-styles
 │   ├── layout.js            # RootLayout: metadata, viewport, PWA-config, service worker registration
-│   └── page.js              # Indlæser <Klarmeldt /> som client component
+│   ├── login/
+│   │   └── page.js          # Login-side med email/password (Supabase Auth)
+│   └── page.js              # Auth-check → redirect til /login eller vis <Klarmeldt />
 ├── components/
 │   └── Klarmeldt.jsx         # HELE applikationen (~1245 linjer, én stor fil)
 ├── public/
 │   ├── manifest.json         # PWA manifest (standalone app)
-│   ├── sw.js                 # Service worker (cache-first, offline fallback)
+│   ├── sw.js                 # Service worker (network-first, offline fallback)
 │   ├── icon-192.png          # App-ikon 192x192
 │   └── icon-512.png          # App-ikon 512x512
 ├── lib/
 │   └── supabase.js            # Supabase client (browser)
 ├── supabase/
 │   ├── migrations/            # 13 SQL-migrationsfiler (se Database-sektion)
-│   └── seed.sql               # Demo-data matchende mock i Klarmeldt.jsx
+│   ├── seed.sql               # Demo-data SQL (DEPRECATED — brug seed-via-api.js)
+│   ├── seed-via-api.js        # Seed-script via Supabase Admin API (kræver SERVICE_ROLE_KEY)
+│   └── fix-and-seed.sql       # Trigger-fix + seed SQL (brugt under debugging)
 ├── package.json               # Dependencies: next, react, react-dom, @supabase/supabase-js
 ├── next.config.js             # reactStrictMode: true
 ├── .env.local                 # Supabase URL + anon key (gitignored)
@@ -71,7 +76,7 @@ Hele UI'et ligger i `components/Klarmeldt.jsx`. Filen er struktureret som:
 - `Tab` — fanebladnavigation
 
 ### Administrator-view (linje 196-1215)
-- **`AdminSidebar`:** Navigation med 7 sider + rolleskifter + brugerinfo ("Pieter Secuur, Driftsleder")
+- **`AdminSidebar`:** Navigation med 7 sider + logout-knap + brugerinfo (fra `profile.full_name`)
 - **`AdminDash`:** Dashboard med KPI'er, advarsler, kommende projekter, indsigt
 - **`ProjCard`:** Projektkort med adresse, faggrupper, progress
 - **`AdminDetail`:** Projektdetalje med 7 faner:
@@ -89,22 +94,43 @@ Hele UI'et ligger i `components/Klarmeldt.jsx`. Filen er struktureret som:
 - **`Contractors`:** Oversigt over tilknyttede håndværkervirksomheder
 
 ### Håndværker-view (linje 937-1108)
-- **`CraftApp`:** Mobilvenligt view for håndværkere (simulerer Phillip fra Maler Gruppen)
+- **`CraftApp`:** Mobilvenligt view for håndværkere (viser indlogget håndværkers firma)
   - "I dag" — aktive opgaver med timer og "meld færdig"
   - "Kommende" — fremtidige opgaver
   - "Udført" — afsluttede opgaver
   - Integreret tidsmåling (start/stop/log timer)
   - Bottom navigation (mobilapp-stil)
+  - Logout-knap i header
 
 ### Main Component (linje 1113-1244)
-- **`Klarmeldt`:** Root-component med role-switching (admin/craft), routing, responsive sidebar
+- **`Klarmeldt`:** Root-component modtager `profile`, `contractor`, `onLogout` som props. Rolle bestemmes af `profile.role` fra databasen (ingen client-side toggle).
 
-## Roller i demo
+## Authentication & Roller
 
-- **Administrator** ("Pieter Secuur, Driftsleder"): Fuld platform med sidebar, dashboard, projekter, analyse
-- **Håndværker** ("Phillip Lundholm, Maler Gruppen"): Mobilvenlig dagsoversigt, timer, opgavestyring
+Login via `/login` med email/password (Supabase Auth). Rolle hentes fra `profiles`-tabellen.
 
-Skift med "Skift til Håndværker/Administrator"-knappen i sidebar.
+### Demo-logins
+
+| Rolle | Navn | Email | Password |
+|-------|------|-------|----------|
+| Admin | Pieter Secuur | `pieter@goldschmidt.dk` | `demo1234` |
+| Håndværker | Phillip Lundholm | `phillip@malergruppen.dk` | `demo1234` |
+| Håndværker | Anders Electi | `anders@electigulv.dk` | `demo1234` |
+| Håndværker | Jens Pedersen | `jens@toemrerpedersen.dk` | `demo1234` |
+| Håndværker | Michael Jensen | `michael@eleksperten.dk` | `demo1234` |
+| Håndværker | Sara Nielsen | `sara@proclean.dk` | `demo1234` |
+| Håndværker | Thomas Murer | `thomas@murermester.dk` | `demo1234` |
+
+### Auth-flow
+1. Bruger åbner `/` → `page.js` tjekker session via `supabase.auth.getSession()`
+2. Ingen session → redirect til `/login`
+3. Login med email/password → `signInWithPassword()`
+4. Succes → redirect til `/` → hent profil fra `profiles` → vis admin eller håndværker-view
+5. Logout-knap → `signOut()` → redirect til `/login`
+
+### Roller
+- **Admin** (`role: 'admin'`): Fuld platform med sidebar, dashboard, projekter, analyse
+- **Håndværker** (`role: 'haandvaerker'`): Mobilvenlig dagsoversigt, timer, opgavestyring
 
 ## Demo-data
 
@@ -150,11 +176,31 @@ Skift med "Skift til Håndværker/Administrator"-knappen i sidebar.
 13 filer i `supabase/migrations/` (kør i Supabase SQL Editor i rækkefølge):
 1. `_create_enums` → 2. `_create_trades` → 3. `_create_profiles` → 4. `_create_contractors` → 5. `_create_projects` → 6. `_create_tasks` → 7. `_create_messages` → 8. `_create_liability_items` → 9. `_create_inspection_data` → 10. `_create_inspection_rooms` → 11. `_create_time_logs` → 12. `_create_indexes` → 13. `_create_rls_policies`
 
-Seed-data i `supabase/seed.sql` (kræver at auth users oprettes først).
+### Seed-data
+
+Brug `supabase/seed-via-api.js` til at seede demo-data (IKKE `seed.sql`):
+
+```bash
+# Kræver service_role key (IKKE anon key)
+SERVICE_ROLE_KEY=sb_secret_... node supabase/seed-via-api.js
+```
+
+Scriptet opretter:
+1. 7 auth-brugere via `supabase.auth.admin.createUser()` (trigger opretter profiler automatisk)
+2. Trades (faggrupper)
+3. Contractors (håndværkerfirmaer) med `user_id` → auth user
+4. Projects, tasks, messages, time_logs, liability_items, inspection_data, inspection_rooms
+
+**VIGTIGT:** Brug ALDRIG direkte SQL INSERT i `auth.users` — GoTrue kræver interne felter. Brug altid Admin API.
+
+## Vercel Environment Variables
+
+Følgende env vars skal sættes i Vercel Dashboard → Settings → Environment Variables:
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
 ## Planlagt videreudvikling
 
-- Authentication med roller (Supabase Auth)
 - Koble frontend til Supabase (erstat mock-data med live queries)
 - Filupload til flytterapporter og billeder (Supabase Storage)
 - Push-notifikationer til håndværkere
