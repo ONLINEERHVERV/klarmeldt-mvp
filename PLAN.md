@@ -20,11 +20,11 @@
 
 ## Fase 1 – Data & CRUD (estimat: 1-1.5 uge)
 
-- [ ] Projekter fra database – Hent projekter fra Supabase i stedet for mock-data. Dashboard viser rigtige data (1 dag, Claude Code) [afhænger: Fase 0]
-- [ ] Opret/rediger projekter – Admin kan oprette nye istandsættelser. Formularer med adresse, datoer, noter (1 dag, Claude Code) [afhænger: projekter fra db]
-- [ ] Opgaver fra database – Opgaver hentes og vises per projekt. Inkl. status, faggruppe, tildeling (1 dag, Claude Code) [afhænger: projekter fra db]
+- [x] Projekter fra database – Hent projekter fra Supabase i stedet for mock-data. Dashboard viser rigtige data (1 dag, Claude Code) [afhænger: Fase 0]
+- [x] Opret/rediger projekter – Admin kan oprette nye istandsættelser. Formularer med adresse, datoer, noter (1 dag, Claude Code) [afhænger: projekter fra db]
+- [x] Opgaver fra database – Opgaver hentes og vises per projekt. Inkl. status, faggruppe, tildeling (1 dag, Claude Code) [afhænger: projekter fra db]
 - [ ] Opret/rediger opgaver – Admin kan oprette og tildele opgaver. Dropdown for faggruppe + håndværker (1 dag, Claude Code) [afhænger: opgaver fra db]
-- [ ] Håndværkere fra database – Håndværkerliste med kontaktinfo og rating (0.5 dag, Claude Code) [afhænger: Fase 0]
+- [x] Håndværkere fra database – Håndværkerliste med kontaktinfo og rating (0.5 dag, Claude Code) [afhænger: Fase 0]
 - [ ] Beskeder fra database – Real-time chat per projekt. Supabase Realtime subscriptions (1.5 dag, Claude Code) [afhænger: projekter fra db]
 
 ---

@@ -137,6 +137,65 @@ async function fetchProjects() {
   }));
 }
 
+async function createProject(fields) {
+  const { data, error } = await supabase.from('projects').insert({
+    address: fields.addr,
+    zip: fields.zip,
+    property_name: fields.prop,
+    unit: fields.unit,
+    area_m2: Number(fields.area),
+    rooms: Number(fields.rooms),
+    floor: Number(fields.floor) || 0,
+    move_out_date: fields.moveOut,
+    start_date: fields.start,
+    deadline_date: fields.deadline,
+    inspection_at: fields.inspection || null,
+    tenant_years: Number(fields.tenantYrs) || 0,
+    created_by: fields.createdBy,
+  }).select('*, created_by_profile:profiles!created_by(full_name)').single();
+  if (error) throw error;
+  return {
+    id: data.id,
+    addr: data.address,
+    zip: data.zip,
+    status: DB_STATUS[data.status] || data.status,
+    prop: data.property_name,
+    unit: data.unit,
+    area: Number(data.area_m2),
+    rooms: data.rooms,
+    floor: data.floor,
+    moveOut: data.move_out_date,
+    start: data.start_date,
+    deadline: data.deadline_date,
+    inspection: data.inspection_at,
+    createdBy: data.created_by_profile?.full_name || "Ukendt",
+    createdAt: data.created_at,
+    tenantYrs: data.tenant_years,
+    tasks: [],
+    msgs: [],
+    liability: { tenant: [], landlord: [] },
+    inspectionData: null,
+  };
+}
+
+async function updateProjectInDB(id, fields) {
+  const dbFields = {};
+  if (fields.addr !== undefined) dbFields.address = fields.addr;
+  if (fields.zip !== undefined) dbFields.zip = fields.zip;
+  if (fields.prop !== undefined) dbFields.property_name = fields.prop;
+  if (fields.unit !== undefined) dbFields.unit = fields.unit;
+  if (fields.area !== undefined) dbFields.area_m2 = Number(fields.area);
+  if (fields.rooms !== undefined) dbFields.rooms = Number(fields.rooms);
+  if (fields.floor !== undefined) dbFields.floor = Number(fields.floor);
+  if (fields.moveOut !== undefined) dbFields.move_out_date = fields.moveOut;
+  if (fields.start !== undefined) dbFields.start_date = fields.start;
+  if (fields.deadline !== undefined) dbFields.deadline_date = fields.deadline;
+  if (fields.inspection !== undefined) dbFields.inspection_at = fields.inspection || null;
+  if (fields.tenantYrs !== undefined) dbFields.tenant_years = Number(fields.tenantYrs);
+  const { error } = await supabase.from('projects').update(dbFields).eq('id', id);
+  if (error) throw error;
+}
+
 // --- UTILITIES ---
 const fmt = (d) => d ? new Date(d).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }) : "–";
 const fmtShort = (d) => d ? new Date(d).toLocaleDateString("da-DK", { day: "numeric", month: "short" }) : "–";
@@ -393,6 +452,35 @@ const AdminDetail = ({ project: p, update, go, profile, contractors }) => {
   const [newT, setNewT] = useState({ trade: "maler", desc: "", assigned: "", estH: "", room: "", liability: "udlejer" });
   const [msgTxt, setMsgTxt] = useState("");
   const [inspecting, setInspecting] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editProj, setEditProj] = useState({});
+  const [editSaving, setEditSaving] = useState(false);
+  const [editErr, setEditErr] = useState("");
+
+  const startEdit = () => {
+    setEditProj({ addr: p.addr, zip: p.zip, prop: p.prop, unit: p.unit, area: p.area, rooms: p.rooms, floor: p.floor, moveOut: p.moveOut || "", start: p.start || "", deadline: p.deadline || "", inspection: p.inspection || "", tenantYrs: p.tenantYrs || 0 });
+    setEditErr("");
+    setEditMode(true);
+  };
+
+  const saveEdit = async () => {
+    setEditErr("");
+    if (!editProj.addr || !editProj.zip || !editProj.prop || !editProj.unit || !editProj.area || !editProj.rooms || !editProj.moveOut || !editProj.start || !editProj.deadline) {
+      setEditErr("Udfyld alle påkrævede felter"); return;
+    }
+    if (editProj.start < editProj.moveOut) { setEditErr("Opstart skal være på eller efter fraflytningsdato"); return; }
+    if (editProj.deadline < editProj.start) { setEditErr("Deadline skal være på eller efter opstart"); return; }
+    setEditSaving(true);
+    try {
+      await updateProjectInDB(p.id, editProj);
+      update({ ...p, ...editProj, area: Number(editProj.area), rooms: Number(editProj.rooms), floor: Number(editProj.floor), tenantYrs: Number(editProj.tenantYrs) });
+      setEditMode(false);
+    } catch (err) {
+      setEditErr(err.message || "Kunne ikke gemme ændringer");
+    } finally {
+      setEditSaving(false);
+    }
+  };
 
   if (!p) return null;
 
@@ -593,13 +681,48 @@ const AdminDetail = ({ project: p, update, go, profile, contractors }) => {
 
       {/* === STAMDATA === */}
       {tab === "data" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          {[["Lejemålsnr.", p.unit], ["Adresse", `${p.addr}, ${p.zip}`], ["Ejendom", p.prop], ["Bruttoareal", `${p.area} m²`], ["Antal rum", p.rooms], ["Etage", `${p.floor}. sal`], ["Udflytningsdato", fmt(p.moveOut)], ["Synsdato", fmt(p.inspection)], ["Lejer boet i", `${p.tenantYrs} år`], ["Oprettet af", `${p.createdBy} · ${fmtTime(p.createdAt)}`]].map(([l, v]) => (
-            <div key={l} style={{ background: "#F8FAFC", borderRadius: 10, padding: "12px 16px" }}>
-              <div style={{ fontSize: 11, color: "#94A3B8", marginBottom: 3 }}>{l}</div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "#0F172A" }}>{v}</div>
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Stamdata</h3>
+            {!editMode && <Btn small onClick={startEdit}><I.Tool style={{ width: 13, height: 13 }} /> Rediger</Btn>}
+          </div>
+          {editErr && <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 12, color: "#991B1B" }}>{editErr}</div>}
+          {editMode ? (
+            <div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+                {[
+                  ["Adresse", "addr", "text"], ["Postnr.", "zip", "text"], ["Ejendom", "prop", "text"], ["Lejemålsnr.", "unit", "text"],
+                  ["Areal m²", "area", "number"], ["Antal rum", "rooms", "number"], ["Etage", "floor", "number"], ["Lejer boet i (år)", "tenantYrs", "number"],
+                ].map(([l, k, type]) => (
+                  <div key={k} style={{ background: "#F8FAFC", borderRadius: 10, padding: "10px 14px" }}>
+                    <div style={{ fontSize: 11, color: "#94A3B8", marginBottom: 4 }}>{l}</div>
+                    <input value={editProj[k] ?? ""} onChange={e => setEditProj({ ...editProj, [k]: e.target.value })} type={type} style={{ width: "100%", padding: "6px 8px", borderRadius: 6, border: "1px solid #CBD5E1", fontSize: 13, boxSizing: "border-box" }} />
+                  </div>
+                ))}
+                {[
+                  ["Fraflytning", "moveOut", "date"], ["Opstart", "start", "date"], ["Deadline", "deadline", "date"], ["Syn", "inspection", "datetime-local"],
+                ].map(([l, k, type]) => (
+                  <div key={k} style={{ background: "#F8FAFC", borderRadius: 10, padding: "10px 14px" }}>
+                    <div style={{ fontSize: 11, color: "#94A3B8", marginBottom: 4 }}>{l}</div>
+                    <input value={editProj[k] ?? ""} onChange={e => setEditProj({ ...editProj, [k]: e.target.value })} type={type} style={{ width: "100%", padding: "6px 8px", borderRadius: 6, border: "1px solid #CBD5E1", fontSize: 13, boxSizing: "border-box" }} />
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <Btn primary small onClick={saveEdit} style={{ opacity: editSaving ? 0.6 : 1 }} disabled={editSaving}>{editSaving ? "Gemmer..." : "Gem ændringer"}</Btn>
+                <Btn small onClick={() => { setEditMode(false); setEditErr(""); }}>Annuller</Btn>
+              </div>
             </div>
-          ))}
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              {[["Lejemålsnr.", p.unit], ["Adresse", `${p.addr}, ${p.zip}`], ["Ejendom", p.prop], ["Bruttoareal", `${p.area} m²`], ["Antal rum", p.rooms], ["Etage", `${p.floor}. sal`], ["Udflytningsdato", fmt(p.moveOut)], ["Synsdato", fmt(p.inspection)], ["Lejer boet i", `${p.tenantYrs} år`], ["Oprettet af", `${p.createdBy} · ${fmtTime(p.createdAt)}`]].map(([l, v]) => (
+                <div key={l} style={{ background: "#F8FAFC", borderRadius: 10, padding: "12px 16px" }}>
+                  <div style={{ fontSize: 11, color: "#94A3B8", marginBottom: 3 }}>{l}</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "#0F172A" }}>{v}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -1131,6 +1254,11 @@ export default function Klarmeldt({ profile, contractor, onLogout }) {
   const [dataError, setDataError] = useState(null);
   const [sideOpen, setSideOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [showAddProj, setShowAddProj] = useState(false);
+  const emptyProj = { addr: "", zip: "", prop: "", unit: "", area: "", rooms: "", floor: "0", moveOut: "", start: "", deadline: "", inspection: "", tenantYrs: "0" };
+  const [newProj, setNewProj] = useState(emptyProj);
+  const [projSaving, setProjSaving] = useState(false);
+  const [projErr, setProjErr] = useState("");
 
   const loadData = useCallback(async () => {
     setDataLoading(true);
@@ -1163,6 +1291,30 @@ export default function Klarmeldt({ profile, contractor, onLogout }) {
 
   const go = (pg) => { setPage(pg); if (pg !== "detail") setSelProj(null); };
 
+  const handleCreateProject = async () => {
+    setProjErr("");
+    const { addr, zip, prop, unit, area, rooms, moveOut, start, deadline } = newProj;
+    if (!addr || !zip || !prop || !unit || !area || !rooms || !moveOut || !start || !deadline) {
+      setProjErr("Udfyld alle påkrævede felter (adresse, postnr., ejendom, enhed, areal, rum, fraflytning, opstart, deadline)");
+      return;
+    }
+    if (start < moveOut) { setProjErr("Opstart skal være på eller efter fraflytningsdato"); return; }
+    if (deadline < start) { setProjErr("Deadline skal være på eller efter opstart"); return; }
+    setProjSaving(true);
+    try {
+      const created = await createProject({ ...newProj, createdBy: profile.id });
+      setProjects(ps => [created, ...ps]);
+      setNewProj(emptyProj);
+      setShowAddProj(false);
+      setSelProj(created);
+      setPage("detail");
+    } catch (err) {
+      setProjErr(err.message || "Kunne ikke oprette projekt");
+    } finally {
+      setProjSaving(false);
+    }
+  };
+
   if (dataLoading) return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", background: "#F8FAFC", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
       <div style={{ width: 48, height: 48, borderRadius: 14, background: "linear-gradient(135deg, #22D3EE, #3B82F6)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 22, color: "#fff", marginBottom: 16 }}>K</div>
@@ -1188,8 +1340,39 @@ export default function Klarmeldt({ profile, contractor, onLogout }) {
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
             <div><h1 style={{ fontSize: 26, fontWeight: 800, color: "#0F172A", margin: 0 }}>Projekter</h1><p style={{ color: "#64748B", margin: "4px 0 0", fontSize: 14 }}>Alle istandsættelser</p></div>
-            <Btn primary><I.Plus style={{ width: 15, height: 15 }} /> Nyt projekt</Btn>
+            <Btn primary onClick={() => { setShowAddProj(s => !s); setProjErr(""); }}><I.Plus style={{ width: 15, height: 15 }} /> Nyt projekt</Btn>
           </div>
+          {showAddProj && (
+            <Card style={{ marginBottom: 20, background: "#F8FAFC" }}>
+              <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700, color: "#0F172A" }}>Opret nyt projekt</h3>
+              {projErr && <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 12, color: "#991B1B" }}>{projErr}</div>}
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+                <input value={newProj.addr} onChange={e => setNewProj({ ...newProj, addr: e.target.value })} placeholder="Adresse *" style={{ flex: 2, minWidth: 200, padding: "7px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 13 }} />
+                <input value={newProj.zip} onChange={e => setNewProj({ ...newProj, zip: e.target.value })} placeholder="Postnr. *" style={{ width: 100, padding: "7px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 13 }} />
+                <input value={newProj.prop} onChange={e => setNewProj({ ...newProj, prop: e.target.value })} placeholder="Ejendom *" style={{ flex: 1, minWidth: 150, padding: "7px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 13 }} />
+              </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+                <input value={newProj.unit} onChange={e => setNewProj({ ...newProj, unit: e.target.value })} placeholder="Enhed *" style={{ width: 100, padding: "7px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 13 }} />
+                <input value={newProj.area} onChange={e => setNewProj({ ...newProj, area: e.target.value })} placeholder="Areal m² *" type="number" style={{ width: 90, padding: "7px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 13 }} />
+                <input value={newProj.rooms} onChange={e => setNewProj({ ...newProj, rooms: e.target.value })} placeholder="Rum *" type="number" style={{ width: 65, padding: "7px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 13 }} />
+                <input value={newProj.floor} onChange={e => setNewProj({ ...newProj, floor: e.target.value })} placeholder="Etage" type="number" style={{ width: 65, padding: "7px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 13 }} />
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <input value={newProj.tenantYrs} onChange={e => setNewProj({ ...newProj, tenantYrs: e.target.value })} placeholder="0" type="number" style={{ width: 55, padding: "7px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 13 }} />
+                  <span style={{ fontSize: 12, color: "#64748B" }}>år boet</span>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+                <label style={{ display: "flex", flexDirection: "column", fontSize: 11, color: "#64748B", gap: 3 }}>Fraflytning *<input value={newProj.moveOut} onChange={e => setNewProj({ ...newProj, moveOut: e.target.value })} type="date" style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 13 }} /></label>
+                <label style={{ display: "flex", flexDirection: "column", fontSize: 11, color: "#64748B", gap: 3 }}>Opstart *<input value={newProj.start} onChange={e => setNewProj({ ...newProj, start: e.target.value })} type="date" style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 13 }} /></label>
+                <label style={{ display: "flex", flexDirection: "column", fontSize: 11, color: "#64748B", gap: 3 }}>Deadline *<input value={newProj.deadline} onChange={e => setNewProj({ ...newProj, deadline: e.target.value })} type="date" style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 13 }} /></label>
+                <label style={{ display: "flex", flexDirection: "column", fontSize: 11, color: "#64748B", gap: 3 }}>Syn (valgfrit)<input value={newProj.inspection} onChange={e => setNewProj({ ...newProj, inspection: e.target.value })} type="datetime-local" style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 13 }} /></label>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <Btn primary small onClick={handleCreateProject} style={{ opacity: projSaving ? 0.6 : 1 }} disabled={projSaving}>{projSaving ? "Opretter..." : "Opret projekt"}</Btn>
+                <Btn small onClick={() => { setShowAddProj(false); setNewProj(emptyProj); setProjErr(""); }}>Annuller</Btn>
+              </div>
+            </Card>
+          )}
           {["i", "k"].map(s => {
             const ps = projects.filter(p => p.status === s);
             return ps.length > 0 && (
