@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { supabase } from '../lib/supabase';
 
 // ============================================================
 // KLARMELDT — Complete MVP Prototype
@@ -61,69 +62,80 @@ const SCOL = {
 };
 const TCOL = { afventer: "#94A3B8", igang: "#F59E0B", faerdig: "#3B82F6", godkendt: "#10B981", rettelse: "#EF4444" };
 const TL = { afventer: "Afventer", igang: "I gang", faerdig: "Færdig", godkendt: "Godkendt", rettelse: "Rettelse" };
+const DB_STATUS = { kommende: "k", igangvaerende: "i", afsluttet: "a" };
+const DB_TASK_STATUS = { afventer: "afventer", igang: "igang", faerdig: "faerdig", godkendt: "godkendt", rettelse: "rettelse" };
 
-// --- CONTRACTORS ---
-const CONS = [
-  { id: 1, name: "Maler Gruppen ApS", contact: "Phillip Lundholm", email: "phillip@malergruppen.dk", phone: "29384756", trade: "maler", rate: 425, lang: "da", rating: 4.7, completedJobs: 34, errorRate: 3.2, onTimeRate: 94 },
-  { id: 2, name: "Electi Gulvservice ApS", contact: "Idris", email: "info@jigulvservice.dk", phone: "41413341", trade: "gulv", rate: 475, lang: "da", rating: 4.5, completedJobs: 22, errorRate: 5.1, onTimeRate: 88 },
-  { id: 3, name: "Tømrer Pedersen", contact: "Lars Pedersen", email: "lars@tp.dk", phone: "51234567", trade: "tomrer", rate: 450, lang: "da", rating: 3.8, completedJobs: 28, errorRate: 11.4, onTimeRate: 79 },
-  { id: 4, name: "El-Eksperten", contact: "Ahmed Hassan", email: "ahmed@elek.dk", phone: "60123456", trade: "el", rate: 495, lang: "en", rating: 4.9, completedJobs: 15, errorRate: 1.2, onTimeRate: 97 },
-  { id: 5, name: "ProClean", contact: "Maria Sørensen", email: "maria@proclean.dk", phone: "42345678", trade: "rengoring", rate: 350, lang: "da", rating: 4.6, completedJobs: 41, errorRate: 2.8, onTimeRate: 95 },
-];
+// --- DATA FETCHING ---
+async function fetchContractors() {
+  const { data, error } = await supabase.from('contractors').select('*').eq('is_active', true);
+  if (error) throw error;
+  return (data || []).map(c => ({
+    id: c.id,
+    name: c.name,
+    contact: c.contact_person,
+    email: c.email,
+    phone: c.phone,
+    trade: c.trade_key,
+    rate: Number(c.rate_dkk),
+    lang: c.lang,
+    rating: Number(c.rating),
+    completedJobs: c.completed_jobs,
+    errorRate: Number(c.error_rate),
+    onTimeRate: Number(c.on_time_rate),
+  }));
+}
 
-// --- PROJECTS ---
-const initProjects = () => [
-  {
-    id: 1, addr: "Klosterparken 14, 2. th", zip: "4100 Ringsted", status: "i", prop: "Klosterparken", unit: "14-2th",
-    area: 78, rooms: 3, floor: 2, moveOut: "2025-11-01", start: "2025-11-03", deadline: "2025-11-14",
-    inspection: "2025-11-14T10:00", createdBy: "Pieter Secuur", createdAt: "2025-10-15T09:37", tenantYrs: 4,
-    tasks: [
-      { id: 101, trade: "maler", desc: "Malerarbejde – vægge og lofter i alle rum", status: "igang", assigned: 1, estH: 16, room: "Stue", notes: "Ekstra lag i køkken pga. fedtpletter", timeLogged: 11.5 },
-      { id: 102, trade: "maler", desc: "Maling af karme og fodpaneler", status: "igang", assigned: 1, estH: 4, room: "Entré", notes: "", timeLogged: 2 },
-      { id: 103, trade: "tomrer", desc: "Udskift dørgreb i entré + montér 3 dørstop", status: "afventer", assigned: 3, estH: 3, room: "Entré", notes: "", timeLogged: 0 },
-      { id: 104, trade: "tomrer", desc: "Reparér listværk i soveværelse", status: "afventer", assigned: 3, estH: 2, room: "Soveværelse 1", notes: "Lister er knækket ved vindue", timeLogged: 0 },
-      { id: 105, trade: "gulv", desc: "Slibning og lakering af trægulv", status: "afventer", assigned: 2, estH: 8, room: "Stue", notes: "Dybe ridser ved vindue", timeLogged: 0 },
-      { id: 106, trade: "gulv", desc: "Slibning af gulv i soveværelse", status: "afventer", assigned: 2, estH: 4, room: "Soveværelse 1", notes: "", timeLogged: 0 },
-      { id: 107, trade: "el", desc: "Kontrollér stikkontakter + udskift spots i bad", status: "afventer", assigned: 4, estH: 2, room: "Badeværelse", notes: "", timeLogged: 0 },
-      { id: 108, trade: "rengoring", desc: "Hovedrengøring efter håndværkere", status: "afventer", assigned: 5, estH: 4, room: null, notes: "", timeLogged: 0 },
-    ],
-    msgs: [
-      { id: 1, from: "Pieter Secuur", role: "admin", text: "Hej alle – projektet er oprettet. Maler starter mandag d. 3/11.", time: "2025-10-15T10:00" },
-      { id: 2, from: "Phillip Lundholm", role: "craft", text: "Modtaget! Vi er klar mandag morgen kl. 7.", time: "2025-10-15T11:23" },
-      { id: 3, from: "Idris", role: "craft", text: "Fint – regner med at starte onsdag d. 5/11 efter maler er færdig i stuen.", time: "2025-10-15T14:05" },
-    ],
-    liability: { tenant: ["Ridser i gulv ved vindue (stue)", "Rengøring af ovn"], landlord: ["Malerarbejde (normal slitage)", "Udskiftning af dørgreb", "Reparation af listværk"] },
+async function fetchProjects() {
+  const [projRes, taskRes, timeRes] = await Promise.all([
+    supabase.from('projects').select('*, created_by_profile:profiles!created_by(full_name)'),
+    supabase.from('tasks').select('*'),
+    supabase.from('task_time_summary').select('*'),
+  ]);
+  if (projRes.error) throw projRes.error;
+  if (taskRes.error) throw taskRes.error;
+  // time summary may not exist yet — ignore errors
+  const timeLookup = {};
+  (timeRes.data || []).forEach(t => { timeLookup[t.task_id] = Number(t.total_hours) || 0; });
+
+  const tasksByProject = {};
+  (taskRes.data || []).forEach(t => {
+    if (!tasksByProject[t.project_id]) tasksByProject[t.project_id] = [];
+    tasksByProject[t.project_id].push({
+      id: t.id,
+      trade: t.trade_key,
+      desc: t.description,
+      status: DB_TASK_STATUS[t.status] || t.status,
+      assigned: t.assigned_to,
+      estH: Number(t.estimated_hours) || 0,
+      room: t.room || null,
+      notes: t.notes || "",
+      timeLogged: timeLookup[t.id] || 0,
+    });
+  });
+
+  return (projRes.data || []).map(p => ({
+    id: p.id,
+    addr: p.address,
+    zip: p.zip,
+    status: DB_STATUS[p.status] || p.status,
+    prop: p.property_name,
+    unit: p.unit,
+    area: Number(p.area_m2),
+    rooms: p.rooms,
+    floor: p.floor,
+    moveOut: p.move_out_date,
+    start: p.start_date,
+    deadline: p.deadline_date,
+    inspection: p.inspection_at,
+    createdBy: p.created_by_profile?.full_name || "Ukendt",
+    createdAt: p.created_at,
+    tenantYrs: p.tenant_years,
+    tasks: tasksByProject[p.id] || [],
+    msgs: [],
+    liability: { tenant: [], landlord: [] },
     inspectionData: null,
-  },
-  {
-    id: 2, addr: "Klosterparken 8, 1. tv", zip: "4100 Ringsted", status: "k", prop: "Klosterparken", unit: "8-1tv",
-    area: 65, rooms: 2, floor: 1, moveOut: "2025-12-01", start: "2025-12-02", deadline: "2025-12-13",
-    inspection: "2025-12-13T09:00", createdBy: "Frederico Santos", createdAt: "2025-10-28T14:12", tenantYrs: 7,
-    tasks: [
-      { id: 201, trade: "maler", desc: "Malerarbejde i alle rum", status: "afventer", assigned: 1, estH: 14, room: null, notes: "", timeLogged: 0 },
-      { id: 202, trade: "gulv", desc: "Gulvslibning i entré og stue", status: "afventer", assigned: 2, estH: 6, room: "Stue", notes: "", timeLogged: 0 },
-      { id: 203, trade: "rengoring", desc: "Hovedrengøring", status: "afventer", assigned: 5, estH: 3, room: null, notes: "", timeLogged: 0 },
-    ],
-    msgs: [], liability: { tenant: [], landlord: [] }, inspectionData: null,
-  },
-  {
-    id: 3, addr: "Frederiksbro 22, 3. mf", zip: "3400 Hillerød", status: "k", prop: "Frederiksbro", unit: "22-3mf",
-    area: 92, rooms: 4, floor: 3, moveOut: "2026-01-01", start: "2026-01-02", deadline: "2026-01-16",
-    inspection: "2026-01-16T10:00", createdBy: "Pieter Secuur", createdAt: "2025-11-05T08:50", tenantYrs: 2,
-    tasks: [], msgs: [], liability: { tenant: [], landlord: [] }, inspectionData: null,
-  },
-  {
-    id: 4, addr: "Klosterparken 3, st. th", zip: "4100 Ringsted", status: "a", prop: "Klosterparken", unit: "3-stth",
-    area: 55, rooms: 2, floor: 0, moveOut: "2025-10-01", start: "2025-10-02", deadline: "2025-10-11",
-    inspection: "2025-10-11T13:00", createdBy: "Pieter Secuur", createdAt: "2025-09-10T10:00", tenantYrs: 3,
-    tasks: [
-      { id: 301, trade: "maler", desc: "Malerarbejde – vægge", status: "godkendt", assigned: 1, estH: 10, room: null, notes: "", timeLogged: 9.5 },
-      { id: 302, trade: "rengoring", desc: "Hovedrengøring", status: "godkendt", assigned: 5, estH: 3, room: null, notes: "", timeLogged: 3 },
-    ],
-    msgs: [], liability: { tenant: ["Rengøring af ovn"], landlord: ["Maling (slitage)"] },
-    inspectionData: { completed: true, date: "2025-10-11", passRate: 100, rooms: { "Stue": "godkendt", "Køkken": "godkendt", "Soveværelse 1": "godkendt", "Badeværelse": "godkendt" } },
-  },
-];
+  }));
+}
 
 // --- UTILITIES ---
 const fmt = (d) => d ? new Date(d).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }) : "–";
@@ -375,7 +387,7 @@ const ProjCard = ({ p, onClick }) => {
 // ============================================================
 // ADMIN: PROJECT DETAIL
 // ============================================================
-const AdminDetail = ({ project: p, update, go, profile }) => {
+const AdminDetail = ({ project: p, update, go, profile, contractors }) => {
   const [tab, setTab] = useState("tasks");
   const [showAdd, setShowAdd] = useState(false);
   const [newT, setNewT] = useState({ trade: "maler", desc: "", assigned: "", estH: "", room: "", liability: "udlejer" });
@@ -388,7 +400,7 @@ const AdminDetail = ({ project: p, update, go, profile }) => {
 
   const addTask = () => {
     if (!newT.desc) return;
-    const task = { id: Date.now(), trade: newT.trade, desc: newT.desc, status: "afventer", assigned: newT.assigned ? +newT.assigned : null, estH: +newT.estH || 0, room: newT.room || null, notes: "", timeLogged: 0 };
+    const task = { id: crypto.randomUUID(), trade: newT.trade, desc: newT.desc, status: "afventer", assigned: newT.assigned || null, estH: +newT.estH || 0, room: newT.room || null, notes: "", timeLogged: 0 };
     const liab = newT.liability === "lejer" ? { ...p.liability, tenant: [...p.liability.tenant, newT.desc] } : p.liability;
     update({ ...p, tasks: [...p.tasks, task], liability: liab });
     setNewT({ trade: "maler", desc: "", assigned: "", estH: "", room: "", liability: "udlejer" });
@@ -450,7 +462,7 @@ const AdminDetail = ({ project: p, update, go, profile }) => {
                 </select>
                 <input value={newT.desc} onChange={e => setNewT({ ...newT, desc: e.target.value })} placeholder="Beskrivelse..." style={{ flex: 1, minWidth: 180, padding: "7px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 13 }} />
                 <select value={newT.assigned} onChange={e => setNewT({ ...newT, assigned: e.target.value })} style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 13 }}>
-                  <option value="">Tildel...</option>{CONS.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  <option value="">Tildel...</option>{contractors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
                 <select value={newT.room} onChange={e => setNewT({ ...newT, room: e.target.value })} style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 13 }}>
                   <option value="">Rum...</option>{ROOMS.map(r => <option key={r} value={r}>{r}</option>)}
@@ -474,7 +486,7 @@ const AdminDetail = ({ project: p, update, go, profile }) => {
                   <span style={{ fontSize: 11, color: "#64748B", marginLeft: "auto" }}>{tasks.reduce((s, t) => s + t.estH, 0)}t estimeret · {tasks.reduce((s, t) => s + t.timeLogged, 0)}t logget</span>
                 </div>
                 {tasks.map(task => {
-                  const con = CONS.find(c => c.id === task.assigned);
+                  const con = contractors.find(c => c.id === task.assigned);
                   return (
                     <div key={task.id} style={{ background: "#fff", borderRadius: 10, border: "1px solid #E2E8F0", padding: "12px 16px", marginBottom: 6, display: "flex", alignItems: "center", gap: 12 }}>
                       <div style={{ flex: 1 }}>
@@ -592,7 +604,7 @@ const AdminDetail = ({ project: p, update, go, profile }) => {
       )}
 
       {/* === COST === */}
-      {tab === "cost" && <CostTab project={p} />}
+      {tab === "cost" && <CostTab project={p} contractors={contractors} />}
     </div>
   );
 };
@@ -654,10 +666,10 @@ const Schedule = ({ project: p }) => {
 };
 
 // --- COST TAB ---
-const CostTab = ({ project: p }) => {
+const CostTab = ({ project: p, contractors }) => {
   const costs = {};
   p.tasks.forEach(t => {
-    const con = CONS.find(c => c.id === t.assigned);
+    const con = contractors.find(c => c.id === t.assigned);
     if (!con) return;
     if (!costs[t.trade]) costs[t.trade] = { trade: t.trade, hours: 0, rate: con.rate, total: 0 };
     costs[t.trade].hours += t.timeLogged || t.estH;
@@ -827,13 +839,13 @@ const GuidedInspection = ({ project: p, update, onDone }) => {
 // ============================================================
 // ADMIN: ANALYTICS
 // ============================================================
-const Analytics = () => (
+const Analytics = ({ contractors }) => (
   <div>
     <h1 style={{ fontSize: 26, fontWeight: 800, color: "#0F172A", margin: "0 0 8px" }}>Analyse</h1>
     <p style={{ color: "#64748B", margin: "0 0 24px", fontSize: 14 }}>Evaluer håndværkere og optimér istandsættelser</p>
 
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 16 }}>
-      {CONS.map(c => {
+      {contractors.map(c => {
         const tr = TRADES[c.trade];
         return (
           <Card key={c.id}>
@@ -896,7 +908,7 @@ const Analytics = () => (
 // ============================================================
 // ADMIN: CONTRACTORS
 // ============================================================
-const Contractors = () => (
+const Contractors = ({ contractors }) => (
   <div>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
       <div>
@@ -906,7 +918,7 @@ const Contractors = () => (
       <Btn primary><I.Plus style={{ width: 15, height: 15 }} /> Tilføj virksomhed</Btn>
     </div>
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 14 }}>
-      {CONS.map(c => {
+      {contractors.map(c => {
         const tr = TRADES[c.trade];
         return (
           <Card key={c.id}>
@@ -932,15 +944,15 @@ const Contractors = () => (
 // ============================================================
 // HÅNDVÆRKER: MOBILE APP VIEW
 // ============================================================
-const CraftApp = ({ projects, update, profile, contractor, onLogout }) => {
+const CraftApp = ({ projects, contractors, update, profile, contractor, onLogout }) => {
   const [page, setPage] = useState("today");
   const [selTask, setSelTask] = useState(null);
   const [timer, setTimer] = useState(null);
   const [elapsed, setElapsed] = useState(0);
 
-  // Find matching mock contractor by name or email
-  const myCon = contractor ? CONS.find(c => c.name === contractor.name || c.email === contractor.email) : CONS[0];
-  const myConId = myCon ? myCon.id : 1;
+  // Match contractor from DB by id
+  const myCon = contractor ? contractors.find(c => c.id === contractor.id) : contractors[0];
+  const myConId = myCon ? myCon.id : null;
   const myTasks = projects.flatMap(p => p.tasks.filter(t => t.assigned === myConId).map(t => ({ ...t, project: p })));
   const todayTasks = myTasks.filter(t => t.status === "igang" || t.status === "afventer");
   const upcomingTasks = myTasks.filter(t => t.project.status === "k");
@@ -1016,7 +1028,7 @@ const CraftApp = ({ projects, update, profile, contractor, onLogout }) => {
         {/* TODAY */}
         {page === "today" && (
           <div>
-            <h2 style={{ fontSize: 20, fontWeight: 800, color: "#0F172A", margin: "0 0 4px" }}>God morgen, Phillip 👋</h2>
+            <h2 style={{ fontSize: 20, fontWeight: 800, color: "#0F172A", margin: "0 0 4px" }}>God morgen, {profile.full_name.split(" ")[0]} 👋</h2>
             <p style={{ color: "#64748B", fontSize: 13, margin: "0 0 20px" }}>Du har {todayTasks.length} aktive opgaver</p>
 
             {todayTasks.map(task => (
@@ -1113,9 +1125,29 @@ export default function Klarmeldt({ profile, contractor, onLogout }) {
   const role = profile.role === "haandvaerker" ? "craft" : "admin";
   const [page, setPage] = useState("dash");
   const [selProj, setSelProj] = useState(null);
-  const [projects, setProjects] = useState(initProjects);
+  const [projects, setProjects] = useState([]);
+  const [contractors, setContractors] = useState([]);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [dataError, setDataError] = useState(null);
   const [sideOpen, setSideOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+
+  const loadData = useCallback(async () => {
+    setDataLoading(true);
+    setDataError(null);
+    try {
+      const [projs, cons] = await Promise.all([fetchProjects(), fetchContractors()]);
+      setProjects(projs);
+      setContractors(cons);
+    } catch (err) {
+      console.error("Data fetch error:", err);
+      setDataError(err.message || "Kunne ikke hente data");
+    } finally {
+      setDataLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
@@ -1131,7 +1163,23 @@ export default function Klarmeldt({ profile, contractor, onLogout }) {
 
   const go = (pg) => { setPage(pg); if (pg !== "detail") setSelProj(null); };
 
-  if (role === "craft") return <CraftApp projects={projects} update={updateProject} profile={profile} contractor={contractor} onLogout={onLogout} />;
+  if (dataLoading) return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", background: "#F8FAFC", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+      <div style={{ width: 48, height: 48, borderRadius: 14, background: "linear-gradient(135deg, #22D3EE, #3B82F6)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 22, color: "#fff", marginBottom: 16 }}>K</div>
+      <div style={{ fontSize: 15, color: "#64748B", fontWeight: 500 }}>Henter projekter...</div>
+    </div>
+  );
+
+  if (dataError) return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", background: "#F8FAFC", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+      <I.Alert style={{ width: 40, height: 40, color: "#EF4444", marginBottom: 12 }} />
+      <div style={{ fontSize: 16, fontWeight: 700, color: "#991B1B", marginBottom: 6 }}>Fejl ved indlæsning</div>
+      <div style={{ fontSize: 13, color: "#64748B", marginBottom: 16 }}>{dataError}</div>
+      <Btn primary onClick={loadData}>Prøv igen</Btn>
+    </div>
+  );
+
+  if (role === "craft") return <CraftApp projects={projects} contractors={contractors} update={updateProject} profile={profile} contractor={contractor} onLogout={onLogout} />;
 
   const renderPage = () => {
     switch (page) {
@@ -1155,9 +1203,9 @@ export default function Klarmeldt({ profile, contractor, onLogout }) {
           })}
         </div>
       );
-      case "detail": return <AdminDetail project={selProj} update={updateProject} go={go} profile={profile} />;
-      case "craft": return <Contractors />;
-      case "analytics": return <Analytics />;
+      case "detail": return <AdminDetail project={selProj} update={updateProject} go={go} profile={profile} contractors={contractors} />;
+      case "craft": return <Contractors contractors={contractors} />;
+      case "analytics": return <Analytics contractors={contractors} />;
       case "archive": return (
         <div>
           <h1 style={{ fontSize: 26, fontWeight: 800, color: "#0F172A", margin: "0 0 24px" }}>Arkiv</h1>
