@@ -2,6 +2,8 @@
 
 SaaS-platform til danske ejendomsadministratorer der digitaliserer istandsættelse af lejemål. Authentication via Supabase Auth, demo-data i Supabase PostgreSQL, frontend stadig med mock-data i browseren.
 
+Tjek altid PLAN.md for aktuel status og næste opgave. Opdater den når du afslutter en opgave.
+
 ## Hosting & Repository
 
 - **Prototype URL:** https://klarmeldt.frederikhoffmeyer.dk
