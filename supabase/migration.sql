@@ -230,7 +230,8 @@ CREATE TABLE time_logs (
 );
 
 -- Computed view: total hours per task (replaces task.timeLogged)
-CREATE OR REPLACE VIEW task_time_summary AS
+CREATE OR REPLACE VIEW task_time_summary
+WITH (security_invoker = on) AS
 SELECT
   task_id,
   COALESCE(SUM(hours), 0) AS total_hours,
